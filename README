@@ -1,5 +1,8 @@
 # mercurius
 A toy web browser written in Rust.
 
-## licence
+## license
 MIT
+
+## test
+Just run `cargo test`
