@@ -47,32 +47,32 @@ fn tag_close(input: &str) -> nom::IResult<&str, &str> {
     .map(|(rest, (_, _, tag_name, _))| (rest, tag_name))
 }
 
-fn text(input: &str) -> nom::IResult<&str, Box<crate::parser::dom::Node>> {
+fn text(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
     nom::combinator::map(
         nom::combinator::recognize(nom::multi::many1(nom::character::complete::alphanumeric1)),
-        |text: &str| -> Box<crate::parser::dom::Node> {
-            Box::new(*crate::parser::dom::Text::new(text.to_string()))
+        |text: &str| -> crate::parser::dom::Node {
+            *crate::parser::dom::Text::new(text.to_string())
         },
     )(input)
 }
 
-fn nodes(input: &str) -> nom::IResult<&str, Vec<Box<crate::parser::dom::Node>>> {
+fn nodes(input: &str) -> nom::IResult<&str, Vec<crate::parser::dom::Node>> {
     nom::multi::many0(combine_parser)(input)
 }
 
-fn combine_parser(input: &str) -> nom::IResult<&str, Box<crate::parser::dom::Node>> {
+fn combine_parser(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
     nom::branch::alt((element_parser, text_parser))(input)
 }
 
-fn element_parser(input: &str) -> nom::IResult<&str, Box<crate::parser::dom::Node>> {
+fn element_parser(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
     element(input)
 }
 
-fn text_parser(input: &str) -> nom::IResult<&str, Box<crate::parser::dom::Node>> {
+fn text_parser(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
     text(input)
 }
 
-fn element(input: &str) -> nom::IResult<&str, Box<crate::parser::dom::Node>> {
+fn element(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
     let (rest, (open_tag_name, attributes)) = tag_open(input)?;
     let (rest, children) = nodes(rest)?;
     let (rest, close_tag_name) = tag_close(rest)?;
@@ -85,11 +85,7 @@ fn element(input: &str) -> nom::IResult<&str, Box<crate::parser::dom::Node>> {
     } else {
         Ok((
             rest,
-            Box::new(*crate::parser::dom::Element::new(
-                open_tag_name,
-                attributes,
-                children,
-            )),
+            crate::parser::dom::Element::new(open_tag_name, attributes, children),
         ))
     }
 }
@@ -147,11 +143,11 @@ mod tests {
             element("<div>test</div>"),
             Ok((
                 "",
-                Box::new(*crate::parser::dom::Element::new(
+                crate::parser::dom::Element::new(
                     "div".to_string(),
                     crate::parser::dom::AttrMap::new(),
-                    vec![Box::new(*crate::parser::dom::Text::new("test".to_string()))],
-                ))
+                    vec![*crate::parser::dom::Text::new("test".to_string())],
+                )
             ))
         );
 
@@ -159,15 +155,15 @@ mod tests {
             element("<div id=\"test\">test</div>"),
             Ok((
                 "",
-                Box::new(*crate::parser::dom::Element::new(
+                crate::parser::dom::Element::new(
                     "div".to_string(),
                     {
                         let mut map = crate::parser::dom::AttrMap::new();
                         map.insert("id".to_string(), "test".to_string());
                         map
                     },
-                    vec![Box::new(*crate::parser::dom::Text::new("test".to_string()))],
-                ))
+                    vec![*crate::parser::dom::Text::new("test".to_string())],
+                )
             ))
         );
     }

@@ -1,6 +1,6 @@
 #[derive(Debug, PartialEq)]
 pub struct Node {
-    pub children: Vec<Box<Node>>,
+    pub children: Vec<Node>,
     pub node_type: NodeType,
 }
 
@@ -19,14 +19,14 @@ pub struct Element {
 pub type AttrMap = std::collections::HashMap<String, String>;
 
 impl Element {
-    pub fn new(name: String, attributes: AttrMap, children: Vec<Box<Node>>) -> Box<Node> {
-        Box::new(Node {
+    pub fn new(name: String, attributes: AttrMap, children: Vec<Node>) -> Node {
+        Node {
             node_type: NodeType::Element(Element {
                 tag_name: name,
                 attributes,
             }),
             children,
-        })
+        }
     }
 
     pub fn get_id(&self) -> Option<&String> {
