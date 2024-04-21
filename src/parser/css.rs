@@ -54,21 +54,10 @@ pub enum AtRule {
     Media(String, Vec<Rule>),
 }
 
-// Utility function to parse whitespace
-fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> nom::IResult<&'a str, O>
-where
-    F: Fn(&'a str) -> nom::IResult<&'a str, O>,
-{
-    nom::sequence::delimited(
-        nom::character::complete::space0,
-        inner,
-        nom::character::complete::space0,
-    )
-}
-
 fn simple_selector(input: &str) -> nom::IResult<&str, Selector> {
-    let (input, tag_name) =
-        nom::combinator::opt(ws(nom::character::complete::alphanumeric1))(input)?;
+    let (input, tag_name) = nom::combinator::opt(crate::parser::util::ws(
+        nom::character::complete::alphanumeric1,
+    ))(input)?;
 
     Ok((
         input,
@@ -79,12 +68,12 @@ fn simple_selector(input: &str) -> nom::IResult<&str, Selector> {
 }
 
 fn declaration(input: &str) -> nom::IResult<&str, Declaration> {
-    let (input, name) = ws(nom::bytes::complete::take_while1(|c: char| {
+    let (input, name) = crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
         c.is_alphanumeric() || c == '-'
     }))(input)?;
-    let (input, _) = ws(nom::bytes::complete::tag(":"))(input)?;
+    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(":"))(input)?;
     let (input, value) = value(input)?;
-    let (input, _) = ws(nom::bytes::complete::tag(";"))(input)?;
+    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(";"))(input)?;
 
     Ok((
         input,
@@ -120,23 +109,23 @@ fn parse_length(input: &str) -> nom::IResult<&str, Value> {
 }
 
 fn parse_color(input: &str) -> nom::IResult<&str, Value> {
-    let (input, _) = ws(nom::bytes::complete::tag("rgb("))(input)?;
-    let (input, r) = ws(nom::character::complete::u8)(input)?;
-    let (input, _) = ws(nom::bytes::complete::tag(","))(input)?;
-    let (input, g) = ws(nom::character::complete::u8)(input)?;
-    let (input, _) = ws(nom::bytes::complete::tag(","))(input)?;
-    let (input, b) = ws(nom::character::complete::u8)(input)?;
-    let (input, _) = ws(nom::bytes::complete::tag(")"))(input)?;
+    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag("rgb("))(input)?;
+    let (input, r) = crate::parser::util::ws(nom::character::complete::u8)(input)?;
+    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(","))(input)?;
+    let (input, g) = crate::parser::util::ws(nom::character::complete::u8)(input)?;
+    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(","))(input)?;
+    let (input, b) = crate::parser::util::ws(nom::character::complete::u8)(input)?;
+    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(")"))(input)?;
 
     Ok((input, Value::Color(Color::Rgb(r, g, b))))
 }
 
 fn parse_at_rule(input: &str) -> nom::IResult<&str, AtRule> {
-    let (input, _) = ws(nom::bytes::complete::tag("@media"))(input)?;
-    let (input, media) = ws(nom::bytes::streaming::take_until("{"))(input)?;
-    let (input, _) = ws(nom::character::complete::char('{'))(input)?;
-    let (input, rules) = nom::multi::many0(ws(parse_rule))(input)?;
-    let (input, _) = ws(nom::character::complete::char('}'))(input)?;
+    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag("@media"))(input)?;
+    let (input, media) = crate::parser::util::ws(nom::bytes::streaming::take_until("{"))(input)?;
+    let (input, _) = crate::parser::util::ws(nom::character::complete::char('{'))(input)?;
+    let (input, rules) = nom::multi::many0(crate::parser::util::ws(parse_rule))(input)?;
+    let (input, _) = crate::parser::util::ws(nom::character::complete::char('}'))(input)?;
 
     Ok((input, AtRule::Media(media.trim().to_string(), rules)))
 }
@@ -145,19 +134,23 @@ fn value(input: &str) -> nom::IResult<&str, Value> {
     nom::branch::alt((
         parse_length,
         parse_color,
-        nom::combinator::map(ws(nom::character::complete::alphanumeric1), |s: &str| {
-            Value::Keyword(s.to_string())
-        }),
+        nom::combinator::map(
+            crate::parser::util::ws(nom::character::complete::alphanumeric1),
+            |s: &str| Value::Keyword(s.to_string()),
+        ),
     ))(input)
 }
 
 fn parse_rule(input: &str) -> nom::IResult<&str, Rule> {
     let (input, selector) = simple_selector(input)?;
-    let (input, _) = ws(nom::character::complete::char('{'))(input)?;
-    let (input, declarations) =
-        nom::multi::separated_list0(ws(nom::character::complete::char(';')), declaration)(input)?;
-    let (input, _) = nom::combinator::opt(ws(nom::character::complete::char(';')))(input)?;
-    let (input, _) = ws(nom::character::complete::char('}'))(input)?;
+    let (input, _) = crate::parser::util::ws(nom::character::complete::char('{'))(input)?;
+    let (input, declarations) = nom::multi::separated_list0(
+        crate::parser::util::ws(nom::character::complete::char(';')),
+        declaration,
+    )(input)?;
+    let (input, _) =
+        nom::combinator::opt(crate::parser::util::ws(nom::character::complete::char(';')))(input)?;
+    let (input, _) = crate::parser::util::ws(nom::character::complete::char('}'))(input)?;
 
     Ok((
         input,
@@ -179,10 +172,8 @@ fn parse_at_rule_wrapper(input: &str) -> nom::IResult<&str, Item> {
 }
 
 fn stylesheet(input: &str) -> nom::IResult<&str, Stylesheet> {
-    let (input, items) = nom::multi::separated_list0(
-        ws(nom::character::complete::char('\n')),
-        nom::branch::alt((rule_wrapper, parse_at_rule_wrapper)),
-    )(input)?;
+    let (input, items) =
+        nom::multi::many0(nom::branch::alt((rule_wrapper, parse_at_rule_wrapper)))(input)?;
 
     Ok((input, Stylesheet { items }))
 }
@@ -193,8 +184,10 @@ mod tests {
 
     #[test]
     fn test_simple_selector() {
-        let css = r"h1 { color: blue; }
-        p { margin: 5px; }";
+        let css = r"
+        h1 { color: blue; }
+        p { margin: 5px; }
+        ";
 
         let (_, stylesheet) = stylesheet(css).unwrap();
 
@@ -287,7 +280,10 @@ mod tests {
             }
         );
 
-        let css = r"h1 { margin: 1em; }";
+        let css = r"
+        h1 { margin: 1em; }
+        ";
+
         let (_, stylesheet2) = stylesheet(css).unwrap();
 
         assert_eq!(
@@ -308,7 +304,12 @@ mod tests {
 
     #[test]
     fn test_parse_media_at_rule() {
-        let css = r"@media screen {h1 { color: red; }p { font-size: 14px; }}";
+        let css = r"
+        @media screen {
+            h1 { color: red; }
+            p { font-size: 14px; }
+        }
+        ";
 
         let expected = Stylesheet {
             items: vec![Item::AtRule(AtRule::Media(
