@@ -25,14 +25,20 @@ fn attributes(input: &str) -> nom::IResult<&str, crate::parser::dom::AttrMap> {
     })
 }
 
-fn tag_open(input: &str) -> nom::IResult<&str, (String, crate::parser::dom::AttrMap)> {
-    nom::sequence::tuple((
-        crate::parser::util::ws(nom::character::complete::char('<')),
-        nom::combinator::recognize(nom::multi::many1(nom::character::complete::alphanumeric1)),
-        attributes,
-        crate::parser::util::ws(nom::character::complete::char('>')),
-    ))(input)
-    .map(|(rest, (_, tag_name, attributes, _))| (rest, (tag_name.to_string(), attributes)))
+fn tag_open(input: &str) -> nom::IResult<&str, (String, crate::parser::dom::AttrMap, bool)> {
+    let (input, _) = crate::parser::util::ws(nom::character::complete::char('<'))(input)?;
+    let (input, tag_name) = nom::combinator::recognize(nom::multi::many1(
+        nom::character::complete::alphanumeric1,
+    ))(input)?;
+    let (input, attributes) = attributes(input)?;
+    let (input, self_closing) =
+        nom::combinator::opt(crate::parser::util::ws(nom::character::complete::char('/')))(input)?;
+    let (input, _) = crate::parser::util::ws(nom::character::complete::char('>'))(input)?;
+
+    Ok((
+        input,
+        (tag_name.to_string(), attributes, self_closing.is_some()),
+    ))
 }
 
 fn tag_close(input: &str) -> nom::IResult<&str, &str> {
@@ -71,7 +77,14 @@ fn text_parser(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
 }
 
 fn element(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
-    let (rest, (open_tag_name, attributes)) = tag_open(input)?;
+    let (rest, (open_tag_name, attributes, self_closing)) = tag_open(input)?;
+    if self_closing {
+        return Ok((
+            rest,
+            crate::parser::dom::Element::new(open_tag_name, attributes, vec![]),
+        ));
+    }
+
     let (rest, children) = nodes(rest)?;
     let (rest, close_tag_name) = tag_close(rest)?;
 
@@ -126,7 +139,7 @@ mod tests {
         expected_map.insert("abc".to_string(), "def".to_string());
         assert_eq!(
             tag_open("<div test=\"foobar\" abc=\"def\">"),
-            Ok(("", ("div".to_string(), expected_map)))
+            Ok(("", ("div".to_string(), expected_map, false)))
         );
     }
 
@@ -169,6 +182,23 @@ mod tests {
                 )
             ))
         );
+    }
+
+    #[test]
+    fn test_self_closing() {
+        let html = r#"<div id="test" />"#;
+
+        let expected = crate::parser::dom::Element::new(
+            "div".to_string(),
+            {
+                let mut map = crate::parser::dom::AttrMap::new();
+                map.insert("id".to_string(), "test".to_string());
+                map
+            },
+            vec![],
+        );
+
+        assert_eq!(element(html), Ok(("", expected)));
     }
 
     #[test]
