@@ -1,3 +1,5 @@
+use std::str::FromStr as _;
+
 #[derive(Debug, PartialEq)]
 pub struct Stylesheet {
     pub items: Vec<Item>,
@@ -41,6 +43,9 @@ pub enum Value {
 #[derive(Debug, PartialEq)]
 pub enum Color {
     Rgb(u8, u8, u8),
+    Rgba(u8, u8, u8, f32),
+    Hsl(u8, u8, u8),
+    Hsla(u8, u8, u8, f32),
 }
 
 #[derive(Debug, PartialEq)]
@@ -109,15 +114,155 @@ fn parse_length(input: &str) -> nom::IResult<&str, Value> {
 }
 
 fn parse_color(input: &str) -> nom::IResult<&str, Value> {
-    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag("rgb("))(input)?;
-    let (input, r) = crate::parser::util::ws(nom::character::complete::u8)(input)?;
-    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(","))(input)?;
-    let (input, g) = crate::parser::util::ws(nom::character::complete::u8)(input)?;
-    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(","))(input)?;
-    let (input, b) = crate::parser::util::ws(nom::character::complete::u8)(input)?;
-    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(")"))(input)?;
+    let (input, tag) = nom::branch::alt((
+        crate::parser::util::ws(nom::bytes::complete::tag("#")),
+        crate::parser::util::ws(nom::bytes::complete::tag("rgba")),
+        crate::parser::util::ws(nom::bytes::complete::tag("rgb")),
+        crate::parser::util::ws(nom::bytes::complete::tag("hsla")),
+        crate::parser::util::ws(nom::bytes::complete::tag("hsl")),
+    ))(input)?;
 
-    Ok((input, Value::Color(Color::Rgb(r, g, b))))
+    match tag {
+        "#" => {
+            let (input, r) =
+                nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
+                    u8::from_str_radix(s, 16)
+                })(input)?;
+            let (input, g) =
+                nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
+                    u8::from_str_radix(s, 16)
+                })(input)?;
+            let (input, b) =
+                nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
+                    u8::from_str_radix(s, 16)
+                })(input)?;
+
+            Ok((input, Value::Color(Color::Rgb(r, g, b))))
+        }
+        "rgba" => {
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char('('))(input)?;
+            let (input, r) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, g) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, b) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, a) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit() || c == '.'
+                })),
+                |s: &str| f32::from_str(s),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(')'))(input)?;
+
+            Ok((input, Value::Color(Color::Rgba(r, g, b, a))))
+        }
+        "rgb" => {
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char('('))(input)?;
+            let (input, r) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, g) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, b) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(')'))(input)?;
+
+            Ok((input, Value::Color(Color::Rgb(r, g, b))))
+        }
+        "hsla" => {
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char('('))(input)?;
+            let (input, h) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, s) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char('%'))(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, l) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char('%'))(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, a) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit() || c == '.'
+                })),
+                |s: &str| f32::from_str(s),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(')'))(input)?;
+
+            Ok((input, Value::Color(Color::Hsla(h, s, l, a))))
+        }
+        "hsl" => {
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char('('))(input)?;
+            let (input, h) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, s) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char('%'))(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
+            let (input, l) = nom::combinator::map_res(
+                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+                    c.is_ascii_digit()
+                })),
+                |s: &str| s.parse::<u8>(),
+            )(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char('%'))(input)?;
+            let (input, _) = crate::parser::util::ws(nom::character::complete::char(')'))(input)?;
+
+            Ok((input, Value::Color(Color::Hsl(h, s, l))))
+        }
+        _ => unreachable!(),
+    }
 }
 
 fn parse_at_rule(input: &str) -> nom::IResult<&str, AtRule> {
@@ -253,6 +398,129 @@ mod tests {
                     declarations: vec![Declaration {
                         name: "color".to_string(),
                         value: Value::Color(Color::Rgb(133, 2, 55)),
+                    },],
+                }),],
+            }
+        );
+    }
+
+    #[test]
+    fn test_rgba() {
+        let css = r"h1 { color: rgba(255, 0, 0, 0.5); }";
+
+        let (_, stylesheet1) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet1,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Rgba(255, 0, 0, 0.5)),
+                    },],
+                }),],
+            }
+        );
+
+        let css = r"h1 { color: rgba(133,2,   55, 0.5); }";
+
+        let (_, stylesheet2) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet2,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Rgba(133, 2, 55, 0.5)),
+                    },],
+                }),],
+            }
+        );
+    }
+
+    #[test]
+    fn test_hsl() {
+        let css = r"h1 { color: hsl(0, 100%, 50%); }";
+
+        let (_, stylesheet1) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet1,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Hsl(0, 100, 50)),
+                    },],
+                }),],
+            }
+        );
+
+        let css = r"h1 { color: hsl(133, 2%,   55%); }";
+
+        let (_, stylesheet2) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet2,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Hsl(133, 2, 55)),
+                    },],
+                }),],
+            }
+        );
+    }
+
+    #[test]
+    fn test_hsla() {
+        let css = r"h1 { color: hsla(0, 100%, 50%, 0.5); }";
+
+        let (_, stylesheet1) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet1,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Hsla(0, 100, 50, 0.5)),
+                    },],
+                }),],
+            }
+        );
+
+        let css = r"h1 { color: hsla(133, 2%,   55%, 0.5); }";
+
+        let (_, stylesheet2) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet2,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Hsla(133, 2, 55, 0.5)),
                     },],
                 }),],
             }
