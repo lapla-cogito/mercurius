@@ -1,6 +1,12 @@
 #[derive(Debug, PartialEq)]
 pub struct Stylesheet {
-    pub rules: Vec<Rule>,
+    pub items: Vec<Item>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Item {
+    Rule(Rule),
+    AtRule(AtRule),
 }
 
 #[derive(Debug, PartialEq)]
@@ -90,7 +96,17 @@ fn declaration(input: &str) -> nom::IResult<&str, Declaration> {
 }
 
 fn parse_length(input: &str) -> nom::IResult<&str, Value> {
-    let (input, number) = nom::number::complete::float(input)?;
+    let (input, number) = nom::combinator::map_res(
+        nom::combinator::recognize(nom::sequence::pair(
+            nom::character::complete::digit1,
+            nom::combinator::opt(nom::sequence::pair(
+                nom::character::complete::char('.'),
+                nom::character::complete::digit1,
+            )),
+        )),
+        |s: &str| s.parse::<f32>(),
+    )(input)?;
+
     let (input, unit) = nom::branch::alt((
         nom::bytes::complete::tag("px"),
         nom::bytes::complete::tag("em"),
@@ -115,6 +131,16 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
     Ok((input, Value::Color(Color::Rgb(r, g, b))))
 }
 
+fn parse_at_rule(input: &str) -> nom::IResult<&str, AtRule> {
+    let (input, _) = ws(nom::bytes::complete::tag("@media"))(input)?;
+    let (input, media) = ws(nom::bytes::streaming::take_until("{"))(input)?;
+    let (input, _) = ws(nom::character::complete::char('{'))(input)?;
+    let (input, rules) = nom::multi::many0(ws(parse_rule))(input)?;
+    let (input, _) = ws(nom::character::complete::char('}'))(input)?;
+
+    Ok((input, AtRule::Media(media.trim().to_string(), rules)))
+}
+
 fn value(input: &str) -> nom::IResult<&str, Value> {
     nom::branch::alt((
         parse_length,
@@ -125,11 +151,12 @@ fn value(input: &str) -> nom::IResult<&str, Value> {
     ))(input)
 }
 
-fn rule(input: &str) -> nom::IResult<&str, Rule> {
+fn parse_rule(input: &str) -> nom::IResult<&str, Rule> {
     let (input, selector) = simple_selector(input)?;
     let (input, _) = ws(nom::character::complete::char('{'))(input)?;
     let (input, declarations) =
         nom::multi::separated_list0(ws(nom::character::complete::char(';')), declaration)(input)?;
+    let (input, _) = nom::combinator::opt(ws(nom::character::complete::char(';')))(input)?;
     let (input, _) = ws(nom::character::complete::char('}'))(input)?;
 
     Ok((
@@ -141,11 +168,23 @@ fn rule(input: &str) -> nom::IResult<&str, Rule> {
     ))
 }
 
-fn stylesheet(input: &str) -> nom::IResult<&str, Stylesheet> {
-    let (input, rules) =
-        nom::multi::separated_list1(ws(nom::character::complete::char('\n')), rule)(input)?;
+fn rule_wrapper(input: &str) -> nom::IResult<&str, Item> {
+    let (input, r) = parse_rule(input)?;
+    Ok((input, Item::Rule(r)))
+}
 
-    Ok((input, Stylesheet { rules }))
+fn parse_at_rule_wrapper(input: &str) -> nom::IResult<&str, Item> {
+    let (input, ar) = parse_at_rule(input)?;
+    Ok((input, Item::AtRule(ar)))
+}
+
+fn stylesheet(input: &str) -> nom::IResult<&str, Stylesheet> {
+    let (input, items) = nom::multi::separated_list0(
+        ws(nom::character::complete::char('\n')),
+        nom::branch::alt((rule_wrapper, parse_at_rule_wrapper)),
+    )(input)?;
+
+    Ok((input, Stylesheet { items }))
 }
 
 #[cfg(test)]
@@ -162,8 +201,8 @@ mod tests {
         assert_eq!(
             stylesheet,
             Stylesheet {
-                rules: vec![
-                    Rule {
+                items: vec![
+                    Item::Rule(Rule {
                         selectors: vec![Selector::Simple(SimpleSelector {
                             tag_name: Some("h1".to_string()),
                         }),],
@@ -171,8 +210,8 @@ mod tests {
                             name: "color".to_string(),
                             value: Value::Keyword("blue".to_string()),
                         },],
-                    },
-                    Rule {
+                    }),
+                    Item::Rule(Rule {
                         selectors: vec![Selector::Simple(SimpleSelector {
                             tag_name: Some("p".to_string()),
                         }),],
@@ -180,9 +219,123 @@ mod tests {
                             name: "margin".to_string(),
                             value: Value::Length(5.0, Unit::Px),
                         },],
-                    },
+                    }),
                 ],
             }
         );
+    }
+
+    #[test]
+    fn test_rgb() {
+        let css = r"h1 { color: rgb(255, 0, 0); }";
+
+        let (_, stylesheet1) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet1,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Rgb(255, 0, 0)),
+                    },],
+                }),],
+            }
+        );
+
+        let css = r"h1 { color: rgb(133,2,   55); }";
+
+        let (_, stylesheet2) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet2,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Rgb(133, 2, 55)),
+                    },],
+                }),],
+            }
+        );
+    }
+
+    #[test]
+    fn test_length() {
+        let css = r"h1 { margin: 1px; }";
+
+        let (_, stylesheet1) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet1,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "margin".to_string(),
+                        value: Value::Length(1.0, Unit::Px),
+                    },],
+                }),],
+            }
+        );
+
+        let css = r"h1 { margin: 1em; }";
+        let (_, stylesheet2) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet2,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "margin".to_string(),
+                        value: Value::Length(1.0, Unit::Em),
+                    },],
+                }),],
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_media_at_rule() {
+        let css = r"@media screen {h1 { color: red; }p { font-size: 14px; }}";
+
+        let expected = Stylesheet {
+            items: vec![Item::AtRule(AtRule::Media(
+                "screen".to_string(),
+                vec![
+                    Rule {
+                        selectors: vec![Selector::Simple(SimpleSelector {
+                            tag_name: Some("h1".to_string()),
+                        })],
+                        declarations: vec![Declaration {
+                            name: "color".to_string(),
+                            value: Value::Keyword("red".to_string()),
+                        }],
+                    },
+                    Rule {
+                        selectors: vec![Selector::Simple(SimpleSelector {
+                            tag_name: Some("p".to_string()),
+                        })],
+                        declarations: vec![Declaration {
+                            name: "font-size".to_string(),
+                            value: Value::Length(14.0, Unit::Px),
+                        }],
+                    },
+                ],
+            ))],
+        };
+
+        assert_eq!(stylesheet(css), Ok(("", expected)));
     }
 }
