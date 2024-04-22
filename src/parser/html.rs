@@ -1,7 +1,7 @@
 fn attribute(input: &str) -> nom::IResult<&str, (String, String)> {
     nom::sequence::tuple((
         nom::combinator::recognize(nom::multi::many1(nom::character::complete::alphanumeric1)),
-        crate::parser::util::ws(nom::character::complete::char('=')),
+        super::util::ws(nom::character::complete::char('=')),
         nom::sequence::delimited(
             nom::character::complete::char('"'),
             nom::combinator::recognize(nom::multi::many1(nom::character::complete::alphanumeric1)),
@@ -11,13 +11,13 @@ fn attribute(input: &str) -> nom::IResult<&str, (String, String)> {
     .map(|(rest, (key, _, value))| (rest, (key.to_string(), value.to_string())))
 }
 
-fn attributes(input: &str) -> nom::IResult<&str, crate::parser::dom::AttrMap> {
+fn attributes(input: &str) -> nom::IResult<&str, super::dom::AttrMap> {
     nom::multi::many0(nom::sequence::tuple((
         nom::character::complete::space0,
         attribute,
     )))(input)
     .map(|(rest, pairs)| {
-        let mut map = crate::parser::dom::AttrMap::new();
+        let mut map = super::dom::AttrMap::new();
         for (_, (key, value)) in pairs {
             map.insert(key, value);
         }
@@ -25,63 +25,62 @@ fn attributes(input: &str) -> nom::IResult<&str, crate::parser::dom::AttrMap> {
     })
 }
 
-fn tag_open(input: &str) -> nom::IResult<&str, (String, crate::parser::dom::AttrMap, bool)> {
-    let (input, _) = crate::parser::util::ws(nom::character::complete::char('<'))(input)?;
-    let (input, tag_name) = nom::combinator::recognize(nom::multi::many1(
+fn tag_open(input: &str) -> nom::IResult<&str, (String, super::dom::AttrMap, bool)> {
+    let (rest, _) = super::util::html_sanitize(nom::character::complete::char('<'))(input)?;
+    let (rest, tag_name) = nom::combinator::recognize(nom::multi::many1(
         nom::character::complete::alphanumeric1,
-    ))(input)?;
-    let (input, attributes) = attributes(input)?;
-    let (input, self_closing) =
-        nom::combinator::opt(crate::parser::util::ws(nom::character::complete::char('/')))(input)?;
-    let (input, _) = crate::parser::util::ws(nom::character::complete::char('>'))(input)?;
+    ))(rest)?;
+    let (rest, attributes) = attributes(rest)?;
+    let (rest, self_closing) = nom::combinator::opt(super::util::html_sanitize(
+        nom::character::complete::char('/'),
+    ))(rest)?;
+    let (rest, _) = super::util::ws(nom::character::complete::char('>'))(rest)?;
 
     Ok((
-        input,
+        rest,
         (tag_name.to_string(), attributes, self_closing.is_some()),
     ))
 }
 
 fn tag_close(input: &str) -> nom::IResult<&str, &str> {
     nom::sequence::tuple((
-        crate::parser::util::ws(nom::character::complete::char('<')),
+        super::util::html_sanitize(nom::character::complete::char('<')),
         nom::character::complete::char('/'),
         nom::combinator::recognize(nom::multi::many1(nom::character::complete::alphanumeric1)),
-        crate::parser::util::ws(nom::character::complete::char('>')),
+        super::util::html_sanitize(nom::character::complete::char('>')),
     ))(input)
     .map(|(rest, (_, _, tag_name, _))| (rest, tag_name))
 }
 
-fn text(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
+fn text(input: &str) -> nom::IResult<&str, super::dom::Node> {
     nom::combinator::map(
         nom::combinator::recognize(nom::multi::many1(nom::character::complete::alphanumeric1)),
-        |text: &str| -> crate::parser::dom::Node {
-            *crate::parser::dom::Text::new(text.to_string())
-        },
+        |text: &str| -> super::dom::Node { *super::dom::Text::new(text.to_string()) },
     )(input)
 }
 
-fn nodes(input: &str) -> nom::IResult<&str, Vec<crate::parser::dom::Node>> {
+fn nodes(input: &str) -> nom::IResult<&str, Vec<super::dom::Node>> {
     nom::multi::many0(combine_parser)(input)
 }
 
-fn combine_parser(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
+fn combine_parser(input: &str) -> nom::IResult<&str, super::dom::Node> {
     nom::branch::alt((element_parser, text_parser))(input)
 }
 
-fn element_parser(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
+fn element_parser(input: &str) -> nom::IResult<&str, super::dom::Node> {
     element(input)
 }
 
-fn text_parser(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
+fn text_parser(input: &str) -> nom::IResult<&str, super::dom::Node> {
     text(input)
 }
 
-fn element(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
+fn element(input: &str) -> nom::IResult<&str, super::dom::Node> {
     let (rest, (open_tag_name, attributes, self_closing)) = tag_open(input)?;
     if self_closing {
         return Ok((
             rest,
-            crate::parser::dom::Element::new(open_tag_name, attributes, vec![]),
+            super::dom::Element::new(open_tag_name, attributes, vec![]),
         ));
     }
 
@@ -96,7 +95,7 @@ fn element(input: &str) -> nom::IResult<&str, crate::parser::dom::Node> {
     } else {
         Ok((
             rest,
-            crate::parser::dom::Element::new(open_tag_name, attributes, children),
+            super::dom::Element::new(open_tag_name, attributes, children),
         ))
     }
 }
@@ -218,7 +217,66 @@ mod tests {
             },
             vec![*crate::parser::dom::Text::new("test".to_string())],
         );
-        println!("element: {:?}", element(html));
+
+        assert_eq!(element(html), Ok(("", expected)));
+    }
+
+    #[test]
+    fn test_incompatible_tag() {
+        let html = r#"
+        <div id="test">
+            test
+        </span>
+        "#;
+
+        assert_eq!(
+            element(html),
+            Err(nom::Err::Error(nom::error::Error::new(
+                html,
+                nom::error::ErrorKind::Tag
+            )))
+        );
+    }
+
+    #[test]
+    fn test_html_comment() {
+        let html = r#"
+        <!-- this is a comment -->
+        <div id="test">
+            test
+        </div>
+        "#;
+
+        let expected = crate::parser::dom::Element::new(
+            "div".to_string(),
+            {
+                let mut map = crate::parser::dom::AttrMap::new();
+                map.insert("id".to_string(), "test".to_string());
+                map
+            },
+            vec![*crate::parser::dom::Text::new("test".to_string())],
+        );
+
+        assert_eq!(element(html), Ok(("", expected)));
+
+        let html = r#"
+        <!-- this is a comment -->
+        <div id="test">
+            test
+        </div>
+        <!-- this is another comment -->
+        "#;
+
+        let expected = crate::parser::dom::Element::new(
+            "div".to_string(),
+            {
+                let mut map = crate::parser::dom::AttrMap::new();
+                map.insert("id".to_string(), "test".to_string());
+                map
+            },
+            vec![*crate::parser::dom::Text::new("test".to_string())],
+        );
+
         assert_eq!(element(html), Ok(("", expected)));
     }
 }

@@ -60,12 +60,12 @@ pub enum AtRule {
 }
 
 fn simple_selector(input: &str) -> nom::IResult<&str, Selector> {
-    let (input, tag_name) = nom::combinator::opt(crate::parser::util::ws(
+    let (rest, tag_name) = nom::combinator::opt(super::util::css_sanitize(
         nom::character::complete::alphanumeric1,
     ))(input)?;
 
     Ok((
-        input,
+        rest,
         Selector::Simple(SimpleSelector {
             tag_name: tag_name.map(String::from),
         }),
@@ -73,15 +73,15 @@ fn simple_selector(input: &str) -> nom::IResult<&str, Selector> {
 }
 
 fn declaration(input: &str) -> nom::IResult<&str, Declaration> {
-    let (input, name) = crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+    let (rest, name) = super::util::css_sanitize(nom::bytes::complete::take_while1(|c: char| {
         c.is_alphanumeric() || c == '-'
     }))(input)?;
-    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(":"))(input)?;
-    let (input, value) = value(input)?;
-    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag(";"))(input)?;
+    let (rest, _) = super::util::ws(nom::bytes::complete::tag(":"))(rest)?;
+    let (rest, value) = value(rest)?;
+    let (rest, _) = super::util::css_sanitize(nom::bytes::complete::tag(";"))(rest)?;
 
     Ok((
-        input,
+        rest,
         Declaration {
             name: name.to_string(),
             value,
@@ -90,7 +90,7 @@ fn declaration(input: &str) -> nom::IResult<&str, Declaration> {
 }
 
 fn parse_length(input: &str) -> nom::IResult<&str, Value> {
-    let (input, number) = nom::combinator::map_res(
+    let (rest, number) = nom::combinator::map_res(
         nom::combinator::recognize(nom::sequence::pair(
             nom::character::complete::digit1,
             nom::combinator::opt(nom::sequence::pair(
@@ -101,178 +101,178 @@ fn parse_length(input: &str) -> nom::IResult<&str, Value> {
         |s: &str| s.parse::<f32>(),
     )(input)?;
 
-    let (input, unit) = nom::branch::alt((
+    let (rest, unit) = nom::branch::alt((
         nom::bytes::complete::tag("px"),
         nom::bytes::complete::tag("em"),
-    ))(input)?;
+    ))(rest)?;
 
     match unit {
-        "px" => Ok((input, Value::Length(number, Unit::Px))),
-        "em" => Ok((input, Value::Length(number, Unit::Em))),
+        "px" => Ok((rest, Value::Length(number, Unit::Px))),
+        "em" => Ok((rest, Value::Length(number, Unit::Em))),
         _ => unreachable!(),
     }
 }
 
 fn parse_color(input: &str) -> nom::IResult<&str, Value> {
-    let (input, tag) = nom::branch::alt((
-        crate::parser::util::ws(nom::bytes::complete::tag("#")),
-        crate::parser::util::ws(nom::bytes::complete::tag("rgba")),
-        crate::parser::util::ws(nom::bytes::complete::tag("rgb")),
-        crate::parser::util::ws(nom::bytes::complete::tag("hsla")),
-        crate::parser::util::ws(nom::bytes::complete::tag("hsl")),
+    let (rest, tag) = nom::branch::alt((
+        super::util::ws(nom::bytes::complete::tag("#")),
+        super::util::ws(nom::bytes::complete::tag("rgba")),
+        super::util::ws(nom::bytes::complete::tag("rgb")),
+        super::util::ws(nom::bytes::complete::tag("hsla")),
+        super::util::ws(nom::bytes::complete::tag("hsl")),
     ))(input)?;
 
     match tag {
         "#" => {
-            let (input, r) =
+            let (rest, r) =
                 nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
                     u8::from_str_radix(s, 16)
-                })(input)?;
-            let (input, g) =
+                })(rest)?;
+            let (rest, g) =
                 nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
                     u8::from_str_radix(s, 16)
-                })(input)?;
-            let (input, b) =
+                })(rest)?;
+            let (rest, b) =
                 nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
                     u8::from_str_radix(s, 16)
-                })(input)?;
+                })(rest)?;
 
-            Ok((input, Value::Color(Color::Rgb(r, g, b))))
+            Ok((rest, Value::Color(Color::Rgb(r, g, b))))
         }
         "rgba" => {
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char('('))(input)?;
-            let (input, r) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            let (rest, _) = super::util::ws(nom::character::complete::char('('))(rest)?;
+            let (rest, r) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, g) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, g) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, b) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, b) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, a) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, a) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit() || c == '.'
                 })),
                 |s: &str| f32::from_str(s),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(')'))(input)?;
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
 
-            Ok((input, Value::Color(Color::Rgba(r, g, b, a))))
+            Ok((rest, Value::Color(Color::Rgba(r, g, b, a))))
         }
         "rgb" => {
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char('('))(input)?;
-            let (input, r) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            let (rest, _) = super::util::ws(nom::character::complete::char('('))(rest)?;
+            let (rest, r) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, g) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, g) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, b) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, b) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(')'))(input)?;
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
 
-            Ok((input, Value::Color(Color::Rgb(r, g, b))))
+            Ok((rest, Value::Color(Color::Rgb(r, g, b))))
         }
         "hsla" => {
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char('('))(input)?;
-            let (input, h) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            let (rest, _) = super::util::ws(nom::character::complete::char('('))(rest)?;
+            let (rest, h) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, s) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, s) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char('%'))(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, l) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char('%'))(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, l) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char('%'))(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, a) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char('%'))(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, a) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit() || c == '.'
                 })),
                 |s: &str| f32::from_str(s),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(')'))(input)?;
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
 
-            Ok((input, Value::Color(Color::Hsla(h, s, l, a))))
+            Ok((rest, Value::Color(Color::Hsla(h, s, l, a))))
         }
         "hsl" => {
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char('('))(input)?;
-            let (input, h) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            let (rest, _) = super::util::ws(nom::character::complete::char('('))(rest)?;
+            let (rest, h) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, s) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, s) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char('%'))(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(','))(input)?;
-            let (input, l) = nom::combinator::map_res(
-                crate::parser::util::ws(nom::bytes::complete::take_while1(|c: char| {
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char('%'))(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
+            let (rest, l) = nom::combinator::map_res(
+                super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
                 |s: &str| s.parse::<u8>(),
-            )(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char('%'))(input)?;
-            let (input, _) = crate::parser::util::ws(nom::character::complete::char(')'))(input)?;
+            )(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char('%'))(rest)?;
+            let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
 
-            Ok((input, Value::Color(Color::Hsl(h, s, l))))
+            Ok((rest, Value::Color(Color::Hsl(h, s, l))))
         }
         _ => unreachable!(),
     }
 }
 
 fn parse_at_rule(input: &str) -> nom::IResult<&str, AtRule> {
-    let (input, _) = crate::parser::util::ws(nom::bytes::complete::tag("@media"))(input)?;
-    let (input, media) = crate::parser::util::ws(nom::bytes::streaming::take_until("{"))(input)?;
-    let (input, _) = crate::parser::util::ws(nom::character::complete::char('{'))(input)?;
-    let (input, rules) = nom::multi::many0(crate::parser::util::ws(parse_rule))(input)?;
-    let (input, _) = crate::parser::util::ws(nom::character::complete::char('}'))(input)?;
+    let (rest, _) = super::util::css_sanitize(nom::bytes::complete::tag("@media"))(input)?;
+    let (rest, media) = super::util::ws(nom::bytes::streaming::take_until("{"))(rest)?;
+    let (rest, _) = super::util::ws(nom::character::complete::char('{'))(rest)?;
+    let (rest, rules) = nom::multi::many0(super::util::css_sanitize(parse_rule))(rest)?;
+    let (rest, _) = super::util::css_sanitize(nom::character::complete::char('}'))(rest)?;
 
-    Ok((input, AtRule::Media(media.trim().to_string(), rules)))
+    Ok((rest, AtRule::Media(media.trim().to_string(), rules)))
 }
 
 fn value(input: &str) -> nom::IResult<&str, Value> {
@@ -280,25 +280,25 @@ fn value(input: &str) -> nom::IResult<&str, Value> {
         parse_length,
         parse_color,
         nom::combinator::map(
-            crate::parser::util::ws(nom::character::complete::alphanumeric1),
+            super::util::ws(nom::character::complete::alphanumeric1),
             |s: &str| Value::Keyword(s.to_string()),
         ),
     ))(input)
 }
 
 fn parse_rule(input: &str) -> nom::IResult<&str, Rule> {
-    let (input, selector) = simple_selector(input)?;
-    let (input, _) = crate::parser::util::ws(nom::character::complete::char('{'))(input)?;
-    let (input, declarations) = nom::multi::separated_list0(
-        crate::parser::util::ws(nom::character::complete::char(';')),
+    let (rest, selector) = simple_selector(input)?;
+    let (rest, _) = super::util::css_sanitize(nom::character::complete::char('{'))(rest)?;
+    let (rest, declarations) = nom::multi::separated_list0(
+        super::util::ws(nom::character::complete::char(';')),
         declaration,
-    )(input)?;
-    let (input, _) =
-        nom::combinator::opt(crate::parser::util::ws(nom::character::complete::char(';')))(input)?;
-    let (input, _) = crate::parser::util::ws(nom::character::complete::char('}'))(input)?;
+    )(rest)?;
+    let (rest, _) =
+        nom::combinator::opt(super::util::ws(nom::character::complete::char(';')))(rest)?;
+    let (rest, _) = super::util::css_sanitize(nom::character::complete::char('}'))(rest)?;
 
     Ok((
-        input,
+        rest,
         Rule {
             selectors: vec![selector],
             declarations,
@@ -307,20 +307,20 @@ fn parse_rule(input: &str) -> nom::IResult<&str, Rule> {
 }
 
 fn rule_wrapper(input: &str) -> nom::IResult<&str, Item> {
-    let (input, r) = parse_rule(input)?;
-    Ok((input, Item::Rule(r)))
+    let (rest, r) = parse_rule(input)?;
+    Ok((rest, Item::Rule(r)))
 }
 
 fn parse_at_rule_wrapper(input: &str) -> nom::IResult<&str, Item> {
-    let (input, ar) = parse_at_rule(input)?;
-    Ok((input, Item::AtRule(ar)))
+    let (rest, ar) = parse_at_rule(input)?;
+    Ok((rest, Item::AtRule(ar)))
 }
 
 fn stylesheet(input: &str) -> nom::IResult<&str, Stylesheet> {
-    let (input, items) =
+    let (rest, items) =
         nom::multi::many0(nom::branch::alt((rule_wrapper, parse_at_rule_wrapper)))(input)?;
 
-    Ok((input, Stylesheet { items }))
+    Ok((rest, Stylesheet { items }))
 }
 
 #[cfg(test)]
@@ -606,5 +606,68 @@ mod tests {
         };
 
         assert_eq!(stylesheet(css), Ok(("", expected)));
+    }
+
+    #[test]
+    fn test_css_comment() {
+        let css = r#"
+        /* this is a comment */
+        h1 { color: red; }
+        p { font-size: 14px; }
+        "#;
+
+        let expected = Stylesheet {
+            items: vec![
+                Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    })],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Keyword("red".to_string()),
+                    }],
+                }),
+                Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("p".to_string()),
+                    })],
+                    declarations: vec![Declaration {
+                        name: "font-size".to_string(),
+                        value: Value::Length(14.0, Unit::Px),
+                    }],
+                }),
+            ],
+        };
+
+        assert_eq!(stylesheet(css), Ok(("", expected)));
+
+        let css = r#"
+        h1 { color: red; }
+        /* this is a comment */
+        p { font-size: 14px; }
+        "#;
+
+        let expected = Stylesheet {
+            items: vec![
+                Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("h1".to_string()),
+                    })],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Keyword("red".to_string()),
+                    }],
+                }),
+                Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("p".to_string()),
+                    })],
+                    declarations: vec![Declaration {
+                        name: "font-size".to_string(),
+                        value: Value::Length(14.0, Unit::Px),
+                    }],
+                }),
+            ],
+        };
     }
 }
