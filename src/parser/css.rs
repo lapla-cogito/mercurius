@@ -24,7 +24,7 @@ pub enum Selector {
 
 #[derive(Debug, PartialEq)]
 pub struct SimpleSelector {
-    pub tag_name: Option<String>,
+    pub tag_name: Vec<Option<String>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -60,14 +60,26 @@ pub enum AtRule {
 }
 
 fn simple_selector(input: &str) -> nom::IResult<&str, Selector> {
-    let (rest, tag_name) = nom::combinator::opt(super::util::css_sanitize(
-        nom::character::complete::alphanumeric1,
-    ))(input)?;
+    let allow_list = [',', ' ', '.', '[', ']', '='];
+
+    let (rest, name) =
+        super::util::css_sanitize(nom::bytes::complete::take_while1(move |c: char| {
+            c.is_alphanumeric() || allow_list.contains(&c)
+        }))(input)?;
 
     Ok((
         rest,
         Selector::Simple(SimpleSelector {
-            tag_name: tag_name.map(String::from),
+            tag_name: name
+                .split(',')
+                .map(|s| {
+                    if s.trim().is_empty() {
+                        None
+                    } else {
+                        Some(s.trim().to_string())
+                    }
+                })
+                .collect(),
         }),
     ))
 }
@@ -136,8 +148,16 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
                     u8::from_str_radix(s, 16)
                 })(rest)?;
+            let (rest, a) = nom::combinator::opt(nom::combinator::map_res(
+                nom::bytes::complete::take(2usize),
+                |s: &str| u8::from_str_radix(s, 16),
+            ))(rest)?;
 
-            Ok((rest, Value::Color(Color::Rgb(r, g, b))))
+            if let Some(a) = a {
+                Ok((rest, Value::Color(Color::Rgba(r, g, b, a as f32 / 255.0))))
+            } else {
+                Ok((rest, Value::Color(Color::Rgb(r, g, b))))
+            }
         }
         "rgba" => {
             let (rest, _) = super::util::ws(nom::character::complete::char('('))(rest)?;
@@ -342,7 +362,7 @@ mod tests {
                 items: vec![
                     Item::Rule(Rule {
                         selectors: vec![Selector::Simple(SimpleSelector {
-                            tag_name: Some("h1".to_string()),
+                            tag_name: Vec::from([Some("h1".to_string())]),
                         }),],
                         declarations: vec![Declaration {
                             name: "color".to_string(),
@@ -351,7 +371,7 @@ mod tests {
                     }),
                     Item::Rule(Rule {
                         selectors: vec![Selector::Simple(SimpleSelector {
-                            tag_name: Some("p".to_string()),
+                            tag_name: Vec::from([Some("p".to_string())]),
                         }),],
                         declarations: vec![Declaration {
                             name: "margin".to_string(),
@@ -359,6 +379,47 @@ mod tests {
                         },],
                     }),
                 ],
+            }
+        );
+    }
+
+    #[test]
+    fn test_hex_color() {
+        let css = r"h1 { color: #ff0000; }";
+
+        let (_, stylesheet1) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet1,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Vec::from([Some("h1".to_string())]),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Rgb(255, 0, 0)),
+                    },],
+                }),],
+            }
+        );
+
+        let css = r"h1 { color: #ff0000ff; }";
+
+        let (_, stylesheet2) = stylesheet(css).unwrap();
+
+        assert_eq!(
+            stylesheet2,
+            Stylesheet {
+                items: vec![crate::parser::css::Item::Rule(Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Vec::from([Some("h1".to_string())]),
+                    }),],
+                    declarations: vec![Declaration {
+                        name: "color".to_string(),
+                        value: Value::Color(Color::Rgba(255, 0, 0, 1.0)),
+                    },],
+                }),],
             }
         );
     }
@@ -374,7 +435,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -393,7 +454,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -415,7 +476,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -434,7 +495,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -456,7 +517,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -475,7 +536,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -497,7 +558,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -516,7 +577,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -538,7 +599,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "margin".to_string(),
@@ -559,7 +620,7 @@ mod tests {
             Stylesheet {
                 items: vec![crate::parser::css::Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     }),],
                     declarations: vec![Declaration {
                         name: "margin".to_string(),
@@ -585,7 +646,7 @@ mod tests {
                 vec![
                     Rule {
                         selectors: vec![Selector::Simple(SimpleSelector {
-                            tag_name: Some("h1".to_string()),
+                            tag_name: Vec::from([Some("h1".to_string())]),
                         })],
                         declarations: vec![Declaration {
                             name: "color".to_string(),
@@ -594,7 +655,7 @@ mod tests {
                     },
                     Rule {
                         selectors: vec![Selector::Simple(SimpleSelector {
-                            tag_name: Some("p".to_string()),
+                            tag_name: Vec::from([Some("p".to_string())]),
                         })],
                         declarations: vec![Declaration {
                             name: "font-size".to_string(),
@@ -620,7 +681,7 @@ mod tests {
             items: vec![
                 Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     })],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -629,7 +690,7 @@ mod tests {
                 }),
                 Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("p".to_string()),
+                        tag_name: Vec::from([Some("p".to_string())]),
                     })],
                     declarations: vec![Declaration {
                         name: "font-size".to_string(),
@@ -651,7 +712,7 @@ mod tests {
             items: vec![
                 Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("h1".to_string()),
+                        tag_name: Vec::from([Some("h1".to_string())]),
                     })],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
@@ -660,7 +721,7 @@ mod tests {
                 }),
                 Item::Rule(Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("p".to_string()),
+                        tag_name: Vec::from([Some("p".to_string())]),
                     })],
                     declarations: vec![Declaration {
                         name: "font-size".to_string(),
@@ -669,5 +730,49 @@ mod tests {
                 }),
             ],
         };
+
+        assert_eq!(stylesheet(css), Ok(("", expected)));
+    }
+
+    #[test]
+    fn text_multiple_class() {
+        let css = r#"
+        h1, h2 { color: red; }
+        "#;
+
+        let expected = Stylesheet {
+            items: vec![Item::Rule(Rule {
+                selectors: vec![Selector::Simple(SimpleSelector {
+                    tag_name: Vec::from([Some("h1".to_string()), Some("h2".to_string())]),
+                })],
+                declarations: vec![Declaration {
+                    name: "color".to_string(),
+                    value: Value::Keyword("red".to_string()),
+                }],
+            })],
+        };
+        assert_eq!(stylesheet(css), Ok(("", expected)));
+
+        let css = r#"
+        h1, h2, h3, .class { color: red; }
+        "#;
+
+        let expected = Stylesheet {
+            items: vec![Item::Rule(Rule {
+                selectors: vec![Selector::Simple(SimpleSelector {
+                    tag_name: Vec::from([
+                        Some("h1".to_string()),
+                        Some("h2".to_string()),
+                        Some("h3".to_string()),
+                        Some(".class".to_string()),
+                    ]),
+                })],
+                declarations: vec![Declaration {
+                    name: "color".to_string(),
+                    value: Value::Keyword("red".to_string()),
+                }],
+            })],
+        };
+        assert_eq!(stylesheet(css), Ok(("", expected)));
     }
 }
