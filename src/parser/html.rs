@@ -34,7 +34,7 @@ fn tag_open(input: &str) -> nom::IResult<&str, (String, super::dom::AttrMap, boo
     let (rest, self_closing) = nom::combinator::opt(super::util::html_sanitize(
         nom::character::complete::char('/'),
     ))(rest)?;
-    let (rest, _) = super::util::ws(nom::character::complete::char('>'))(rest)?;
+    let (rest, _) = super::util::html_sanitize(nom::character::complete::char('>'))(rest)?;
 
     Ok((
         rest,
@@ -103,6 +103,14 @@ fn element(input: &str) -> nom::IResult<&str, super::dom::Node> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_text() {
+        assert_eq!(
+            text("test"),
+            Ok(("", *crate::parser::dom::Text::new("test".to_string())))
+        );
+    }
 
     #[test]
     fn test_attribute() {
@@ -265,6 +273,28 @@ mod tests {
             test
         </div>
         <!-- this is another comment -->
+        "#;
+
+        let expected = crate::parser::dom::Element::new(
+            "div".to_string(),
+            {
+                let mut map = crate::parser::dom::AttrMap::new();
+                map.insert("id".to_string(), "test".to_string());
+                map
+            },
+            vec![*crate::parser::dom::Text::new("test".to_string())],
+        );
+
+        assert_eq!(element(html), Ok(("", expected)));
+    }
+
+    #[test]
+    fn test_html_comment_in_text() {
+        let html = r#"
+        <div id="test">
+            <!-- this is a comment -->
+            test
+        </div>
         "#;
 
         let expected = crate::parser::dom::Element::new(

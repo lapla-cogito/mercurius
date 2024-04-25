@@ -127,11 +127,11 @@ fn parse_length(input: &str) -> nom::IResult<&str, Value> {
 
 fn parse_color(input: &str) -> nom::IResult<&str, Value> {
     let (rest, tag) = nom::branch::alt((
-        super::util::ws(nom::bytes::complete::tag("#")),
-        super::util::ws(nom::bytes::complete::tag("rgba")),
-        super::util::ws(nom::bytes::complete::tag("rgb")),
-        super::util::ws(nom::bytes::complete::tag("hsla")),
-        super::util::ws(nom::bytes::complete::tag("hsl")),
+        super::util::css_sanitize(nom::bytes::complete::tag("#")),
+        super::util::css_sanitize(nom::bytes::complete::tag("rgba")),
+        super::util::css_sanitize(nom::bytes::complete::tag("rgb")),
+        super::util::css_sanitize(nom::bytes::complete::tag("hsla")),
+        super::util::css_sanitize(nom::bytes::complete::tag("hsl")),
     ))(input)?;
 
     match tag {
