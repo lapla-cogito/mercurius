@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 #[derive(Debug, PartialEq)]
 pub struct Node {
     pub children: Vec<Node>,
@@ -19,6 +21,7 @@ pub struct Element {
 pub type AttrMap = std::collections::HashMap<String, String>;
 
 impl Element {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(name: String, attributes: AttrMap, children: Vec<Node>) -> Node {
         Node {
             node_type: NodeType::Element(Element {
@@ -40,6 +43,7 @@ pub struct Text {
 }
 
 impl Text {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(text: String) -> Box<Node> {
         Box::new(Node {
             node_type: NodeType::Text(Text { data: text }),

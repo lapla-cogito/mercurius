@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 fn attribute(input: &str) -> nom::IResult<&str, (String, String)> {
     nom::sequence::tuple((
         nom::combinator::recognize(nom::multi::many1(nom::character::complete::alphanumeric1)),

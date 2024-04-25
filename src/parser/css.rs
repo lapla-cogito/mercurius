@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::str::FromStr as _;
 
 #[derive(Debug, PartialEq)]
