@@ -19,9 +19,44 @@ pub struct Rule {
     pub declarations: Vec<Declaration>,
 }
 
+impl Rule {
+    fn matches(&self, target: &str) -> bool {
+        for selector in &self.selectors {
+            if let Selector::Simple(tag_name) = selector {
+                for tag_name in tag_name.tag_name.iter().flatten() {
+                    if tag_name == target {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Selector {
+    Universal,
     Simple(SimpleSelector),
+}
+
+impl Selector {
+    pub fn matches(&self, target: &crate::parser::dom::Node) -> Option<bool> {
+        match self {
+            Selector::Simple(s) => {
+                if let crate::parser::dom::NodeType::Element(e) = &target.node_type {
+                    for tag_name in s.tag_name.iter().flatten() {
+                        if tag_name == &e.tag_name {
+                            return Some(true);
+                        }
+                    }
+                    return Some(false);
+                }
+                None
+            }
+            Selector::Universal => Some(true),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
