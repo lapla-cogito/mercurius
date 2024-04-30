@@ -38,6 +38,18 @@ impl Rule {
 pub enum Selector {
     Universal,
     Simple(SimpleSelector),
+    Type {
+        tag_name: String,
+    },
+    Attribute {
+        tag_name: String,
+        op: AttributeSelectorOp,
+        attribute: String,
+        value: String,
+    },
+    Class {
+        class_name: String,
+    },
 }
 
 impl Selector {
@@ -54,6 +66,45 @@ impl Selector {
                 }
                 None
             }
+            Selector::Type { tag_name } => {
+                if let crate::parser::dom::NodeType::Element(e) = &target.node_type {
+                    if tag_name == &e.tag_name {
+                        return Some(true);
+                    }
+                    return Some(false);
+                }
+                None
+            }
+            Selector::Attribute {
+                tag_name,
+                op,
+                attribute,
+                value,
+            } => {
+                if let crate::parser::dom::NodeType::Element(e) = &target.node_type {
+                    if tag_name == &e.tag_name {
+                        if let Some(v) = e.attributes.get(attribute) {
+                            match op {
+                                AttributeSelectorOp::Eq => {
+                                    return Some(v == value);
+                                }
+                                AttributeSelectorOp::Contain => {
+                                    return Some(v.contains(value));
+                                }
+                            }
+                        }
+                    }
+                }
+                Some(false)
+            }
+            Selector::Class { class_name } => {
+                if let crate::parser::dom::NodeType::Element(e) = &target.node_type {
+                    if let Some(class) = e.attributes.get("class") {
+                        return Some(class.split(' ').any(|c| c == class_name));
+                    }
+                }
+                Some(false)
+            }
             Selector::Universal => Some(true),
         }
     }
@@ -62,6 +113,12 @@ impl Selector {
 #[derive(Debug, PartialEq)]
 pub struct SimpleSelector {
     pub tag_name: Vec<Option<String>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum AttributeSelectorOp {
+    Eq,
+    Contain,
 }
 
 #[derive(Debug, PartialEq)]
@@ -971,5 +1028,115 @@ mod tests {
             })],
         };
         assert_eq!(stylesheet(css), Ok(("", expected)));
+    }
+
+    #[test]
+    fn test_universal_selector() {
+        let e = &crate::parser::dom::Element::new(
+            "p".to_string(),
+            [
+                ("id".to_string(), "test".to_string()),
+                ("class".to_string(), "testclass".to_string()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            vec![],
+        );
+
+        assert!(crate::parser::css::Selector::Universal.matches(e).unwrap());
+    }
+
+    #[test]
+    fn test_type_selector() {
+        let e = &crate::parser::dom::Element::new(
+            "p".to_string(),
+            [
+                ("id".to_string(), "test".to_string()),
+                ("class".to_string(), "testclass".to_string()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            vec![],
+        );
+
+        assert!((crate::parser::css::Selector::Type {
+            tag_name: "p".into(),
+        })
+        .matches(e)
+        .unwrap());
+    }
+
+    #[test]
+    fn test_attribute_selector() {
+        let e = &crate::parser::dom::Element::new(
+            "p".to_string(),
+            [
+                ("id".to_string(), "test".to_string()),
+                ("class".to_string(), "testclass".to_string()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            vec![],
+        );
+
+        assert!((crate::parser::css::Selector::Attribute {
+            tag_name: "p".into(),
+            attribute: "id".into(),
+            value: "test".into(),
+            op: AttributeSelectorOp::Eq,
+        })
+        .matches(e)
+        .unwrap());
+
+        assert!(!(crate::parser::css::Selector::Attribute {
+            tag_name: "p".into(),
+            attribute: "id".into(),
+            value: "invalid".into(),
+            op: AttributeSelectorOp::Eq,
+        })
+        .matches(e)
+        .unwrap());
+
+        assert!(!(crate::parser::css::Selector::Attribute {
+            tag_name: "p".into(),
+            attribute: "invalid".into(),
+            value: "test".into(),
+            op: AttributeSelectorOp::Eq,
+        })
+        .matches(e)
+        .unwrap());
+
+        assert!(!(crate::parser::css::Selector::Attribute {
+            tag_name: "invalid".into(),
+            attribute: "id".into(),
+            value: "test".into(),
+            op: AttributeSelectorOp::Eq,
+        })
+        .matches(e)
+        .unwrap());
+    }
+
+    #[test]
+    fn test_class_selector() {
+        let e = &crate::parser::dom::Element::new(
+            "p".to_string(),
+            [
+                ("id".to_string(), "test".to_string()),
+                ("class".to_string(), "testclass".to_string()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            vec![],
+        );
+
+        assert!((crate::parser::css::Selector::Class {
+            class_name: "testclass".into(),
+        })
+        .matches(e)
+        .unwrap());
     }
 }

@@ -46,25 +46,3 @@ impl<'a> StyledNode<'a> {
 pub fn style_tree(root: &super::dom::Node) -> StyledNode<'_> {
     StyledNode::new(root, Default::default(), vec![])
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_universal_selector_behaviour() {
-        let e = &crate::parser::dom::Element::new(
-            "p".to_string(),
-            [
-                ("id".to_string(), "test".to_string()),
-                ("class".to_string(), "testclass".to_string()),
-            ]
-            .iter()
-            .cloned()
-            .collect(),
-            vec![],
-        );
-
-        assert!(crate::parser::css::Selector::Universal.matches(e).unwrap());
-    }
-}
