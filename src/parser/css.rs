@@ -146,6 +146,19 @@ pub enum Color {
 pub enum Unit {
     Px,
     Em,
+    Ex,
+    In,
+    Cm,
+    Mm,
+    Pt,
+    Pc,
+    Ch,
+    Rem,
+    Vw,
+    Vh,
+    Vmin,
+    Vmax,
+    Q,
 }
 
 #[derive(Debug, PartialEq)]
@@ -210,11 +223,37 @@ fn parse_length(input: &str) -> nom::IResult<&str, Value> {
     let (rest, unit) = nom::branch::alt((
         nom::bytes::complete::tag("px"),
         nom::bytes::complete::tag("em"),
+        nom::bytes::complete::tag("ex"),
+        nom::bytes::complete::tag("in"),
+        nom::bytes::complete::tag("cm"),
+        nom::bytes::complete::tag("mm"),
+        nom::bytes::complete::tag("pt"),
+        nom::bytes::complete::tag("pc"),
+        nom::bytes::complete::tag("ch"),
+        nom::bytes::complete::tag("rem"),
+        nom::bytes::complete::tag("vw"),
+        nom::bytes::complete::tag("vh"),
+        nom::bytes::complete::tag("vmin"),
+        nom::bytes::complete::tag("vmax"),
+        nom::bytes::complete::tag("q"),
     ))(rest)?;
 
     match unit {
         "px" => Ok((rest, Value::Length(number, Unit::Px))),
         "em" => Ok((rest, Value::Length(number, Unit::Em))),
+        "ex" => Ok((rest, Value::Length(number, Unit::Ex))),
+        "in" => Ok((rest, Value::Length(number, Unit::In))),
+        "cm" => Ok((rest, Value::Length(number, Unit::Cm))),
+        "mm" => Ok((rest, Value::Length(number, Unit::Mm))),
+        "pt" => Ok((rest, Value::Length(number, Unit::Pt))),
+        "pc" => Ok((rest, Value::Length(number, Unit::Pc))),
+        "ch" => Ok((rest, Value::Length(number, Unit::Ch))),
+        "rem" => Ok((rest, Value::Length(number, Unit::Rem))),
+        "vw" => Ok((rest, Value::Length(number, Unit::Vw))),
+        "vh" => Ok((rest, Value::Length(number, Unit::Vh))),
+        "vmin" => Ok((rest, Value::Length(number, Unit::Vmin))),
+        "vmax" => Ok((rest, Value::Length(number, Unit::Vmax))),
+        "q" => Ok((rest, Value::Length(number, Unit::Q))),
         _ => unreachable!(),
     }
 }
