@@ -7,6 +7,12 @@ pub struct Stylesheet {
     pub items: Vec<Item>,
 }
 
+impl Stylesheet {
+    pub fn new(items: Vec<Item>) -> Self {
+        Self { items }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Item {
     Rule(Rule),
@@ -127,14 +133,14 @@ pub struct Declaration {
     pub value: Value,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Keyword(String),
     Length(f32, Unit),
     Color(Color),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Color {
     Rgb(u8, u8, u8),
     Rgba(u8, u8, u8, f32),
@@ -142,7 +148,7 @@ pub enum Color {
     Hsla(u8, u8, u8, f32),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Unit {
     Px,
     Em,
@@ -1160,6 +1166,116 @@ mod tests {
 
     #[test]
     fn test_class_selector() {
+        let e = &crate::parser::dom::Element::new(
+            "p".to_string(),
+            [
+                ("id".to_string(), "test".to_string()),
+                ("class".to_string(), "testclass".to_string()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            vec![],
+        );
+
+        assert!((crate::parser::css::Selector::Class {
+            class_name: "testclass".into(),
+        })
+        .matches(e)
+        .unwrap());
+    }
+
+    #[test]
+    fn test_universal_selector_matches() {
+        let e = &crate::parser::dom::Element::new(
+            "p".to_string(),
+            [
+                ("id".to_string(), "test".to_string()),
+                ("class".to_string(), "testclass".to_string()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            vec![],
+        );
+
+        assert!(crate::parser::css::Selector::Universal.matches(e).unwrap());
+    }
+
+    #[test]
+    fn test_type_selector_matches() {
+        let e = &crate::parser::dom::Element::new(
+            "p".to_string(),
+            [
+                ("id".to_string(), "test".to_string()),
+                ("class".to_string(), "testclass".to_string()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            vec![],
+        );
+
+        assert!((crate::parser::css::Selector::Type {
+            tag_name: "p".into(),
+        })
+        .matches(e)
+        .unwrap());
+    }
+
+    #[test]
+    fn test_attribute_selector_matches() {
+        let e = &crate::parser::dom::Element::new(
+            "p".to_string(),
+            [
+                ("id".to_string(), "test".to_string()),
+                ("class".to_string(), "testclass".to_string()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            vec![],
+        );
+
+        assert!((crate::parser::css::Selector::Attribute {
+            tag_name: "p".into(),
+            attribute: "id".into(),
+            value: "test".into(),
+            op: AttributeSelectorOp::Eq,
+        })
+        .matches(e)
+        .unwrap());
+
+        assert!(!(crate::parser::css::Selector::Attribute {
+            tag_name: "p".into(),
+            attribute: "id".into(),
+            value: "invalid".into(),
+            op: AttributeSelectorOp::Eq,
+        })
+        .matches(e)
+        .unwrap());
+
+        assert!(!(crate::parser::css::Selector::Attribute {
+            tag_name: "p".into(),
+            attribute: "invalid".into(),
+            value: "test".into(),
+            op: AttributeSelectorOp::Eq,
+        })
+        .matches(e)
+        .unwrap());
+
+        assert!(!(crate::parser::css::Selector::Attribute {
+            tag_name: "invalid".into(),
+            attribute: "id".into(),
+            value: "test".into(),
+            op: AttributeSelectorOp::Eq,
+        })
+        .matches(e)
+        .unwrap());
+    }
+
+    #[test]
+    fn test_class_selector_matches() {
         let e = &crate::parser::dom::Element::new(
             "p".to_string(),
             [
