@@ -9,6 +9,7 @@ pub struct StyledNode<'a> {
     pub children: Vec<StyledNode<'a>>,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Display {
     Inline,
     Block,
@@ -339,6 +340,205 @@ mod tests {
                     node: e,
                     property: properties.iter().cloned().collect(),
                     children: vec![],
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn test_nested_styled_node() {
+        let e = &crate::parser::dom::Element::new(
+            "div".to_string(),
+            [("id".to_string(), "test".to_string())]
+                .iter()
+                .cloned()
+                .collect(),
+            vec![crate::parser::dom::Element::new(
+                "p".to_string(),
+                [("id".to_string(), "test".to_string())]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                vec![],
+            )],
+        );
+
+        {
+            // * { display: block; }
+            let stylesheet =
+                crate::parser::css::Stylesheet::new(vec![crate::parser::css::Item::Rule(
+                    crate::parser::css::Rule {
+                        selectors: vec![crate::parser::css::Selector::Universal],
+                        declarations: vec![crate::parser::css::Declaration {
+                            name: "display".to_string(),
+                            value: crate::parser::css::Value::Keyword("block".to_string()),
+                        }],
+                    },
+                )]);
+
+            assert_eq!(
+                to_styled_node(e, &stylesheet),
+                Some(StyledNode {
+                    node: e,
+                    property: [(
+                        "display".to_string(),
+                        crate::parser::css::Value::Keyword("block".to_string()),
+                    )]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    children: vec![StyledNode {
+                        node: &e.children[0],
+                        property: [(
+                            "display".to_string(),
+                            crate::parser::css::Value::Keyword("block".to_string()),
+                        )]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                        children: vec![],
+                    }],
+                })
+            );
+        }
+
+        {
+            // div { display: block; }
+            let stylesheet =
+                crate::parser::css::Stylesheet::new(vec![crate::parser::css::Item::Rule(
+                    crate::parser::css::Rule {
+                        selectors: vec![crate::parser::css::Selector::Type {
+                            tag_name: "div".into(),
+                        }],
+                        declarations: vec![crate::parser::css::Declaration {
+                            name: "display".into(),
+                            value: crate::parser::css::Value::Keyword("block".to_string()),
+                        }],
+                    },
+                )]);
+
+            assert_eq!(
+                to_styled_node(e, &stylesheet),
+                Some(StyledNode {
+                    node: e,
+                    property: [(
+                        "display".to_string(),
+                        crate::parser::css::Value::Keyword("block".to_string()),
+                    )]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    children: vec![StyledNode {
+                        node: &e.children[0],
+                        property: std::collections::HashMap::new(),
+                        children: vec![],
+                    }]
+                })
+            );
+        }
+
+        {
+            // * { display: block; }
+            // div { display: inline; }
+            let stylesheet = crate::parser::css::Stylesheet::new(vec![
+                crate::parser::css::Item::Rule(crate::parser::css::Rule {
+                    selectors: vec![crate::parser::css::Selector::Universal],
+                    declarations: vec![crate::parser::css::Declaration {
+                        name: "display".to_string(),
+                        value: crate::parser::css::Value::Keyword("block".into()),
+                    }],
+                }),
+                crate::parser::css::Item::Rule(crate::parser::css::Rule {
+                    selectors: vec![crate::parser::css::Selector::Type {
+                        tag_name: "div".into(),
+                    }],
+                    declarations: vec![crate::parser::css::Declaration {
+                        name: "display".into(),
+                        value: crate::parser::css::Value::Keyword("inline".into()),
+                    }],
+                }),
+            ]);
+
+            assert_eq!(
+                to_styled_node(e, &stylesheet),
+                Some(StyledNode {
+                    node: e,
+                    property: [(
+                        "display".to_string(),
+                        crate::parser::css::Value::Keyword("inline".into()),
+                    )]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    children: vec![StyledNode {
+                        node: &e.children[0],
+                        property: [(
+                            "display".to_string(),
+                            crate::parser::css::Value::Keyword("block".into()),
+                        )]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                        children: vec![],
+                    }],
+                })
+            );
+        }
+
+        {
+            // * { display: block; }
+            // div { display: inline; }
+            // p { display: block; }
+            let stylesheet = crate::parser::css::Stylesheet::new(vec![
+                crate::parser::css::Item::Rule(crate::parser::css::Rule {
+                    selectors: vec![crate::parser::css::Selector::Universal],
+                    declarations: vec![crate::parser::css::Declaration {
+                        name: "display".to_string(),
+                        value: crate::parser::css::Value::Keyword("block".into()),
+                    }],
+                }),
+                crate::parser::css::Item::Rule(crate::parser::css::Rule {
+                    selectors: vec![crate::parser::css::Selector::Type {
+                        tag_name: "div".into(),
+                    }],
+                    declarations: vec![crate::parser::css::Declaration {
+                        name: "display".into(),
+                        value: crate::parser::css::Value::Keyword("inline".into()),
+                    }],
+                }),
+                crate::parser::css::Item::Rule(crate::parser::css::Rule {
+                    selectors: vec![crate::parser::css::Selector::Type {
+                        tag_name: "p".into(),
+                    }],
+                    declarations: vec![crate::parser::css::Declaration {
+                        name: "display".into(),
+                        value: crate::parser::css::Value::Keyword("block".into()),
+                    }],
+                }),
+            ]);
+
+            assert_eq!(
+                to_styled_node(e, &stylesheet),
+                Some(StyledNode {
+                    node: e,
+                    property: [(
+                        "display".to_string(),
+                        crate::parser::css::Value::Keyword("inline".into()),
+                    )]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    children: vec![StyledNode {
+                        node: &e.children[0],
+                        property: [(
+                            "display".to_string(),
+                            crate::parser::css::Value::Keyword("block".into()),
+                        )]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                        children: vec![],
+                    }],
                 })
             );
         }
