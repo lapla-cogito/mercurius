@@ -142,10 +142,10 @@ pub enum Value {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Color {
-    Rgb(u8, u8, u8),
-    Rgba(u8, u8, u8, f32),
-    Hsl(u8, u8, u8),
-    Hsla(u8, u8, u8, f32),
+    Rgb(u16, u16, u16),
+    Rgba(u16, u16, u16, f32),
+    Hsl(u16, u16, u16),
+    Hsla(u16, u16, u16, f32),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -277,22 +277,35 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
         "#" => {
             let (rest, r) =
                 nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
-                    u8::from_str_radix(s, 16)
+                    u16::from_str_radix(s, 16)
                 })(rest)?;
             let (rest, g) =
                 nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
-                    u8::from_str_radix(s, 16)
+                    u16::from_str_radix(s, 16)
                 })(rest)?;
             let (rest, b) =
                 nom::combinator::map_res(nom::bytes::complete::take(2usize), |s: &str| {
-                    u8::from_str_radix(s, 16)
+                    u16::from_str_radix(s, 16)
                 })(rest)?;
             let (rest, a) = nom::combinator::opt(nom::combinator::map_res(
                 nom::bytes::complete::take(2usize),
-                |s: &str| u8::from_str_radix(s, 16),
+                |s: &str| u16::from_str_radix(s, 16),
             ))(rest)?;
 
+            if r > 255 || g > 255 || b > 255 {
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    rest,
+                    nom::error::ErrorKind::Verify,
+                )));
+            }
+
             if let Some(a) = a {
+                if a > 255 {
+                    return Err(nom::Err::Error(nom::error::Error::new(
+                        rest,
+                        nom::error::ErrorKind::Verify,
+                    )));
+                }
                 Ok((rest, Value::Color(Color::Rgba(r, g, b, a as f32 / 255.0))))
             } else {
                 Ok((rest, Value::Color(Color::Rgb(r, g, b))))
@@ -304,21 +317,21 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
             let (rest, g) = nom::combinator::map_res(
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
             let (rest, b) = nom::combinator::map_res(
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
             let (rest, a) = nom::combinator::map_res(
@@ -327,7 +340,25 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 })),
                 |s: &str| f32::from_str(s),
             )(rest)?;
+            let (rest, percent) =
+                nom::combinator::opt(super::util::ws(nom::character::complete::char('%')))(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
+
+            if r > 255
+                || g > 255
+                || b > 255
+                || (percent.is_none() && a > 1.0)
+                || (percent.is_some() && a > 100.0)
+            {
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    rest,
+                    nom::error::ErrorKind::Verify,
+                )));
+            }
+
+            if percent.is_none() {
+                return Ok((rest, Value::Color(Color::Rgba(r, g, b, a * 100.0))));
+            }
 
             Ok((rest, Value::Color(Color::Rgba(r, g, b, a))))
         }
@@ -337,7 +368,7 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
 
             let (rest, _) =
@@ -347,7 +378,7 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (mut rest, is_space) =
                 nom::combinator::opt(nom::character::complete::char(' '))(rest)?;
@@ -361,16 +392,22 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
 
             let (rest, is_alpha) = nom::combinator::opt(super::util::ws(
                 nom::bytes::complete::take_until1(")"),
             ))(rest)?;
 
+            if r > 255 || g > 255 || b > 255 {
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    rest,
+                    nom::error::ErrorKind::Verify,
+                )));
+            }
+
             if let Some(mut alpha_string) = is_alpha {
                 if alpha_string.contains('/') {
-                    println!("alpha_string: {:?}", alpha_string);
                     (alpha_string, _) =
                         super::util::ws(nom::character::complete::char('/'))(alpha_string)?;
                 } else if alpha_string.contains(',') {
@@ -384,7 +421,22 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                     })),
                     |s: &str| f32::from_str(s),
                 )(alpha_string)?;
+                let (rest, percent) = nom::combinator::opt(super::util::ws(
+                    nom::character::complete::char('%'),
+                ))(rest)?;
                 let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
+
+                if (percent.is_none() && a > 1.0) || (percent.is_some() && a > 100.0) {
+                    return Err(nom::Err::Error(nom::error::Error::new(
+                        rest,
+                        nom::error::ErrorKind::Verify,
+                    )));
+                }
+
+                if percent.is_none() {
+                    return Ok((rest, Value::Color(Color::Rgba(r, g, b, a * 100.0))));
+                }
+
                 Ok((rest, Value::Color(Color::Rgba(r, g, b, a))))
             } else {
                 let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
@@ -397,14 +449,14 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
             let (rest, s) = nom::combinator::map_res(
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char('%'))(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
@@ -412,7 +464,7 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char('%'))(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char(','))(rest)?;
@@ -422,7 +474,25 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 })),
                 |s: &str| f32::from_str(s),
             )(rest)?;
+            let (rest, percent) =
+                nom::combinator::opt(super::util::ws(nom::character::complete::char('%')))(rest)?;
             let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
+
+            if h > 360
+                || s > 100
+                || l > 100
+                || (percent.is_none() && a > 1.0)
+                || (percent.is_some() && a > 100.0)
+            {
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    rest,
+                    nom::error::ErrorKind::Verify,
+                )));
+            }
+
+            if percent.is_none() {
+                return Ok((rest, Value::Color(Color::Hsla(h, s, l, a * 100.0))));
+            }
 
             Ok((rest, Value::Color(Color::Hsla(h, s, l, a))))
         }
@@ -432,7 +502,7 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (rest, _) =
                 nom::combinator::opt(super::util::ws(nom::character::complete::char(',')))(rest)?;
@@ -440,7 +510,7 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (rest, _) =
                 nom::combinator::opt(super::util::ws(nom::character::complete::char('%')))(rest)?;
@@ -450,7 +520,7 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 super::util::ws(nom::bytes::complete::take_while1(|c: char| {
                     c.is_ascii_digit()
                 })),
-                |s: &str| s.parse::<u8>(),
+                |s: &str| s.parse::<u16>(),
             )(rest)?;
             let (rest, _) =
                 nom::combinator::opt(super::util::ws(nom::character::complete::char('%')))(rest)?;
@@ -459,9 +529,15 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                 nom::bytes::complete::take_until1(")"),
             ))(rest)?;
 
+            if h > 360 || s > 100 || l > 100 {
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    rest,
+                    nom::error::ErrorKind::Verify,
+                )));
+            }
+
             if let Some(mut alpha_string) = is_alpha {
                 if alpha_string.contains('/') {
-                    println!("alpha_string: {:?}", alpha_string);
                     (alpha_string, _) =
                         super::util::ws(nom::character::complete::char('/'))(alpha_string)?;
                 } else if alpha_string.contains(',') {
@@ -475,7 +551,22 @@ fn parse_color(input: &str) -> nom::IResult<&str, Value> {
                     })),
                     |s: &str| f32::from_str(s),
                 )(alpha_string)?;
+                let (rest, percent) = nom::combinator::opt(super::util::ws(
+                    nom::character::complete::char('%'),
+                ))(rest)?;
                 let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
+
+                if (percent.is_none() && a > 1.0) || (percent.is_some() && a > 100.0) {
+                    return Err(nom::Err::Error(nom::error::Error::new(
+                        rest,
+                        nom::error::ErrorKind::Verify,
+                    )));
+                }
+
+                if percent.is_none() {
+                    return Ok((rest, Value::Color(Color::Hsla(h, s, l, a * 100.0))));
+                }
+
                 Ok((rest, Value::Color(Color::Hsla(h, s, l, a))))
             } else {
                 let (rest, _) = super::util::ws(nom::character::complete::char(')'))(rest)?;
@@ -623,6 +714,10 @@ mod tests {
                 }),],
             }
         );
+
+        let invalid_css = r"h1 { color: #ff0000ff00; }";
+        let (_, stylesheet3) = stylesheet(invalid_css).unwrap();
+        assert!(stylesheet3.items.is_empty());
     }
 
     #[test]
@@ -672,7 +767,7 @@ mod tests {
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
-                        value: Value::Color(Color::Rgba(133, 2, 55, 0.5)),
+                        value: Value::Color(Color::Rgba(133, 2, 55, 50.0)),
                     },],
                 }),],
             }
@@ -706,7 +801,7 @@ mod tests {
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
-                        value: Value::Color(Color::Rgba(133, 2, 55, 0.5)),
+                        value: Value::Color(Color::Rgba(133, 2, 55, 50.0)),
                     },],
                 }),],
             }
@@ -728,7 +823,7 @@ mod tests {
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
-                        value: Value::Color(Color::Rgba(255, 0, 0, 0.5)),
+                        value: Value::Color(Color::Rgba(255, 0, 0, 50.0)),
                     },],
                 }),],
             }
@@ -747,7 +842,7 @@ mod tests {
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
-                        value: Value::Color(Color::Rgba(133, 2, 55, 0.5)),
+                        value: Value::Color(Color::Rgba(133, 2, 55, 50.0)),
                     },],
                 }),],
             }
@@ -794,7 +889,7 @@ mod tests {
             }
         );
 
-        let css = r"h1 { color: hsl(133, 2%, 55%, 20); }";
+        let css = r"h1 { color: hsl(133, 2%, 55%, 0.2); }";
         let (_, stylesheet3) = stylesheet(css).unwrap();
         assert_eq!(
             stylesheet3,
@@ -839,7 +934,7 @@ mod tests {
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
-                        value: Value::Color(Color::Hsla(133, 2, 55, 0.5)),
+                        value: Value::Color(Color::Hsla(133, 2, 55, 50.0)),
                     },],
                 }),],
             }
@@ -861,7 +956,7 @@ mod tests {
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
-                        value: Value::Color(Color::Hsla(0, 100, 50, 0.5)),
+                        value: Value::Color(Color::Hsla(0, 100, 50, 50.0)),
                     },],
                 }),],
             }
@@ -880,7 +975,7 @@ mod tests {
                     }),],
                     declarations: vec![Declaration {
                         name: "color".to_string(),
-                        value: Value::Color(Color::Hsla(133, 2, 55, 0.5)),
+                        value: Value::Color(Color::Hsla(133, 2, 55, 50.0)),
                     },],
                 }),],
             }
