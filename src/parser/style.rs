@@ -76,7 +76,12 @@ pub fn to_styled_node<'a>(
                                     }
                                 }
                             }
-                            super::dom::NodeType::Text(_) => todo!(),
+                            super::dom::NodeType::Text(_) => {
+                                property.insert(
+                                    "display".to_string(),
+                                    super::css::Value::Keyword("block".to_string()),
+                                );
+                            }
                         },
                         super::css::Selector::Attribute {
                             tag_name,
@@ -114,7 +119,12 @@ pub fn to_styled_node<'a>(
                                     }
                                 }
                             }
-                            super::dom::NodeType::Text(_) => todo!(),
+                            super::dom::NodeType::Text(_) => {
+                                property.insert(
+                                    "display".to_string(),
+                                    super::css::Value::Keyword("block".to_string()),
+                                );
+                            }
                         },
                         super::css::Selector::Class { class_name } => match &node.node_type {
                             super::dom::NodeType::Element(element) => {
@@ -128,14 +138,119 @@ pub fn to_styled_node<'a>(
                                 }
                             }
                             super::dom::NodeType::Text(_) => {
-                                todo!()
+                                property.insert(
+                                    "display".to_string(),
+                                    super::css::Value::Keyword("block".to_string()),
+                                );
                             }
                         },
                         _ => unreachable!(),
                     }
                 }
             }
-            super::css::Item::AtRule(_) => todo!(),
+            super::css::Item::AtRule(rule) => match rule {
+                super::css::AtRule::Media(_, rules) => {
+                    for rule in rules {
+                        for selector in rule.selectors.iter() {
+                            match selector {
+                                super::css::Selector::Universal => {
+                                    for declaration in rule.declarations.iter() {
+                                        property.insert(
+                                            declaration.name.clone(),
+                                            declaration.value.clone(),
+                                        );
+                                    }
+                                }
+                                super::css::Selector::Type { tag_name } => match &node.node_type {
+                                    super::dom::NodeType::Element(element) => {
+                                        if tag_name == &element.tag_name {
+                                            for declaration in rule.declarations.iter() {
+                                                property.insert(
+                                                    declaration.name.clone(),
+                                                    declaration.value.clone(),
+                                                );
+                                            }
+                                        }
+                                    }
+                                    super::dom::NodeType::Text(_) => {
+                                        property.insert(
+                                            "display".to_string(),
+                                            super::css::Value::Keyword("block".to_string()),
+                                        );
+                                    }
+                                },
+                                super::css::Selector::Attribute {
+                                    tag_name,
+                                    op,
+                                    attribute,
+                                    value,
+                                } => match &node.node_type {
+                                    super::dom::NodeType::Element(element) => {
+                                        if tag_name == &element.tag_name {
+                                            match op {
+                                                super::css::AttributeSelectorOp::Eq => {
+                                                    if element.attributes.get(attribute)
+                                                        == Some(value)
+                                                    {
+                                                        for declaration in rule.declarations.iter()
+                                                        {
+                                                            property.insert(
+                                                                declaration.name.clone(),
+                                                                declaration.value.clone(),
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                                super::css::AttributeSelectorOp::Contain => {
+                                                    if element
+                                                        .attributes
+                                                        .get(attribute)
+                                                        .map_or(false, |v| v.contains(value))
+                                                    {
+                                                        for declaration in rule.declarations.iter()
+                                                        {
+                                                            property.insert(
+                                                                declaration.name.clone(),
+                                                                declaration.value.clone(),
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    super::dom::NodeType::Text(_) => {
+                                        property.insert(
+                                            "display".to_string(),
+                                            super::css::Value::Keyword("block".to_string()),
+                                        );
+                                    }
+                                },
+                                super::css::Selector::Class { class_name } => match &node.node_type
+                                {
+                                    super::dom::NodeType::Element(element) => {
+                                        if element.attributes.get("class") == Some(class_name) {
+                                            for declaration in rule.declarations.iter() {
+                                                property.insert(
+                                                    declaration.name.clone(),
+                                                    declaration.value.clone(),
+                                                );
+                                            }
+                                        }
+                                    }
+                                    super::dom::NodeType::Text(_) => {
+                                        property.insert(
+                                            "display".to_string(),
+                                            super::css::Value::Keyword("block".to_string()),
+                                        );
+                                    }
+                                },
+                                _ => unreachable!(),
+                            }
+                        }
+                    }
+                }
+            },
         }
     }
 
@@ -540,6 +655,93 @@ mod tests {
                         children: vec![],
                     }],
                 })
+            );
+        }
+    }
+
+    #[test]
+    fn test_styled_node_mediaquery() {
+        let e = &crate::parser::dom::Element::new(
+            "div".to_string(),
+            [("id".to_string(), "test".to_string())]
+                .iter()
+                .cloned()
+                .collect(),
+            vec![crate::parser::dom::Element::new(
+                "p".to_string(),
+                [("id".to_string(), "test".to_string())]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                vec![],
+            )],
+        );
+
+        {
+            // * { display: block; }
+            // div { display: inline; }
+            // p { display: block; }
+            let stylesheet = crate::parser::css::Stylesheet::new(vec![
+                crate::parser::css::Item::Rule(crate::parser::css::Rule {
+                    selectors: vec![crate::parser::css::Selector::Universal],
+                    declarations: vec![crate::parser::css::Declaration {
+                        name: "display".to_string(),
+                        value: crate::parser::css::Value::Keyword("block".into()),
+                    }],
+                }),
+                crate::parser::css::Item::Rule(crate::parser::css::Rule {
+                    selectors: vec![crate::parser::css::Selector::Type {
+                        tag_name: "div".into(),
+                    }],
+                    declarations: vec![crate::parser::css::Declaration {
+                        name: "display".into(),
+                        value: crate::parser::css::Value::Keyword("inline".into()),
+                    }],
+                }),
+                crate::parser::css::Item::Rule(crate::parser::css::Rule {
+                    selectors: vec![crate::parser::css::Selector::Type {
+                        tag_name: "p".into(),
+                    }],
+                    declarations: vec![crate::parser::css::Declaration {
+                        name: "display".into(),
+                        value: crate::parser::css::Value::Keyword("block".into()),
+                    }],
+                }),
+                crate::parser::css::Item::AtRule(crate::parser::css::AtRule::Media(
+                    "screen".to_string(),
+                    vec![crate::parser::css::Rule {
+                        selectors: vec![crate::parser::css::Selector::Universal],
+                        declarations: vec![crate::parser::css::Declaration {
+                            name: "display".to_string(),
+                            value: crate::parser::css::Value::Keyword("inline".into()),
+                        }],
+                    }],
+                )),
+            ]);
+
+            assert_eq!(
+                to_styled_node(e, &stylesheet),
+                Some(StyledNode {
+                    node: e,
+                    property: [(
+                        "display".to_string(),
+                        crate::parser::css::Value::Keyword("inline".into()),
+                    )]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    children: vec![StyledNode {
+                        node: &e.children[0],
+                        property: [(
+                            "display".to_string(),
+                            crate::parser::css::Value::Keyword("inline".into()),
+                        )]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                        children: vec![],
+                    }],
+                }),
             );
         }
     }
